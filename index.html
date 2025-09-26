@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>AI Teacher with Puter.js</title>
+  <script src="https://js.puter.com/v2/"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <style>
+    body {
+      font-family: "Inter", sans-serif;
+      display: flex;
+      flex-direction: row;
+      gap: 1.5rem;
+      margin: 0;
+      padding: 1rem;
+      background: #f8fafc;
+      color: #1e293b;
+    }
+    #left, #right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      background: white;
+      padding: 1rem;
+      border-radius: 0.75rem;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    input, select, textarea, button {
+      font-family: inherit;
+      font-size: 14px;
+      padding: 0.5rem;
+      border-radius: 0.5rem;
+      border: 1px solid #cbd5e1;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 2px rgba(99,102,241,0.3);
+    }
+    button {
+      background: #6366f1;
+      color: white;
+      cursor: pointer;
+      transition: background 0.2s;
+      border: none;
+    }
+    button:hover {
+      background: #4f46e5;
+    }
+    button:disabled {
+      background: #cbd5e1;
+      cursor: not-allowed;
+    }
+    #response {
+      flex: 1;
+      overflow-y: auto;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      background: #f9fafb;
+    }
+    textarea {
+      width: 100%;
+      min-height: 200px;
+      resize: vertical;
+    }
+    iframe {
+      width: 100%;
+      flex: 1;
+      min-height: 300px;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.5rem;
+      background: #f1f5f9;
+    }
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    #userStatus {
+      font-size: 13px;
+      color: #475569;
+    }
+  </style>
+</head>
+<body>
+  <div id="left">
+    <input id="promptInput" placeholder="Ask me anything..."/>
+    <select id="modeSelect">
+      <option value="normal">Normal</option>
+      <option value="thinking">Thinking</option>
+    </select>
+    <div class="btn-row">
+      <button id="teachBtn">Teach me</button>
+      <button id="teachStreamBtn">Teach (stream)</button>
+      <button id="webBtn">Ask w/ web</button>
+    </div>
+    <div id="response"></div>
+    <textarea id="aiConsole" placeholder="AI log..."></textarea>
+    <div class="btn-row">
+      <button id="copyBtn">Copy</button>
+      <button id="exportBtn">Export</button>
+    </div>
+    <div class="btn-row">
+      <input id="saveName" placeholder="Lesson name"/>
+      <button id="saveBtn">Save</button>
+      <button id="loadBtn">Load</button>
+    </div>
+    <div class="btn-row">
+      <span id="userStatus">Not signed in</span>
+      <button id="signBtn">Sign In</button>
+    </div>
+  </div>
+  <div id="right">
+    <textarea id="p5code" placeholder="p5.js sketch here"></textarea>
+    <div class="btn-row">
+      <button id="runVizBtn">Run visualization</button>
+      <button id="stopVizBtn">Stop</button>
+      <button id="annotateBtn">Annotate</button>
+    </div>
+    <iframe id="vizFrame"></iframe>
+  </div>
+
+<script>
+const $ = id=>document.getElementById(id);
+
+function renderMarkdownWithKatex(md){
+  const html = marked.parse(md);
+  const container = document.createElement('div');
+  container.innerHTML = html;
+  renderMathInElement(container, { delimiters:[ {left:"$$", right:"$$", display:true}, {left:"$", right:"$", display:false} ] });
+  return container.innerHTML;
+}
+
+async function askAI(prompt, {mode='normal', stream=false}={}){
+  const model = mode==='thinking' ? 'gpt-5-high' : 'gpt-5-chat-latest';
+  const response = await puter.ai.chat.completions.create({
+    model,
+    messages:[{role:'user', content:prompt}],
+    stream
+  });
+  if(!stream){
+    return response.choices[0].message.content;
+  } else {
+    let result="";
+    for await (const delta of response){
+      if(delta.choices?.[0]?.delta?.content){
+        result += delta.choices[0].delta.content;
+        $('response').innerHTML = renderMarkdownWithKatex(result);
+      }
+    }
+    return result;
+  }
+}
+
+async function ensureSignedIn(){
+  if(!(await puter.auth.isSignedIn())){
+    await puter.auth.signIn();
+    const u = await puter.auth.getUser();
+    $('userStatus').textContent = u.username || u.email || u.id;
+    $('signBtn').textContent = 'Sign Out';
+  }
+}
+
+function runP5Sketch(code){
+  const template = `<!DOCTYPE html><html><head><script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"><\/script></head><body><script>${code}<\/script></body></html>`;
+  $('vizFrame').srcdoc = template;
+}
+
+$('runVizBtn').onclick = ()=>{
+  const code = $('p5code').value;
+  runP5Sketch(code);
+};
+$('stopVizBtn').onclick = ()=>{
+  $('vizFrame').srcdoc = 'No sketch running';
+};
+$('annotateBtn').onclick = async ()=>{
+  const code = $('p5code').value;
+  await ensureSignedIn();
+  const prompt = `Annotate and explain this p5.js sketch. Make suggestions to improve performance and add 2 interactive controls. Provide a commented version of the code.`;
+  const annotated = await askAI(prompt + "\n\n" + code, {mode: $('modeSelect').value, stream:true});
+  if(annotated){
+    const m = annotated.match(/```(?:javascript\\n)?([\\s\\S]*?)```/);
+    if(m) $('p5code').value = m[1];
+  }
+};
+
+$('saveBtn').onclick = async ()=>{
+  const name = $('saveName').value.trim() || prompt('Enter a name for this lesson');
+  if(!name) return;
+  await ensureSignedIn();
+  const payload = { prompt: $('promptInput').value, md: $('response').innerText, code: $('p5code').value, aiLog: $('aiConsole').value };
+  try{
+    await puter.kv.set('lesson:'+name, JSON.stringify(payload));
+    alert('Saved as '+name);
+  } catch(e){
+    alert('Save failed: '+e.message);
+  }
+};
+
+$('loadBtn').onclick = async ()=>{
+  const name = $('saveName').value.trim() || prompt('Name to load:');
+  if(!name) return;
+  await ensureSignedIn();
+  try{
+    const raw = await puter.kv.get('lesson:'+name);
+    if(!raw) return alert('No lesson found');
+    const obj = JSON.parse(raw);
+    $('promptInput').value = obj.prompt || '';
+    $('response').innerHTML = obj.md || '';
+    $('p5code').value = obj.code || '';
+    $('aiConsole').value = obj.aiLog || '';
+    alert('Loaded '+name);
+  } catch(e){
+    alert('Load failed: '+e.message);
+  }
+};
+
+$('copyBtn').onclick = ()=>{
+  navigator.clipboard.writeText($('response').innerText).then(()=>alert('Copied rendered markdown text'));
+};
+
+$('exportBtn').onclick = ()=>{
+  const html = `${$('response').innerHTML}`;
+  const blob = new Blob([html], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url;
+  a.download = 'lesson.html';
+  a.click();
+};
+
+(async function(){
+  try{
+    if(window.puter && puter.auth){
+      const signed = await puter.auth.isSignedIn();
+      if(signed){
+        const u = await puter.auth.getUser();
+        $('userStatus').textContent = u.username || u.email || u.id;
+        $('signBtn').textContent = 'Sign Out';
+      }
+    }
+  } catch(e){
+    console.warn('init puter failed', e);
+  }
+  $('response').innerHTML = renderMarkdownWithKatex('# Welcome to AI Teacher\\nType a topic and press **Teach me**. Use `Thinking` mode for deeper answers (slower) and `Normal` for quick answers. Use the right panel to run p5 visualizations.');
+})();
+
+</script>
+</body>
+</html>
