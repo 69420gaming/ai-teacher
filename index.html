@@ -288,7 +288,7 @@ setTimeout(() => {
   // --- VIZ code generator (unchanged except fixed extractor used elsewhere) ---
   async function generateP5Code(topic, { mode='normal', stream=false } = {}){
     const system = `You are "p5-generator", a code-only assistant. Output ONLY runnable p5.js JavaScript code (no explanation, no extra text). If you must include comments, use inline JavaScript comments. Ensure the sketch defines function setup() and (optionally) draw(). Avoid external libraries.`;
-    const prompt = `Generate a p5.js sketch that visualizes: ${topic}\n\nReturn only the JavaScript code (like what you'd paste into a <script> tag). Keep it under 200 lines when possible.`;
+    const prompt = `Generate a p5.js sketch that visualizes: ${topic}\n\nReturn only the JavaScript code (like what you'd paste into a <script> tag).`;
     const raw = await askAI(prompt, { mode, stream, system, model: 'gpt-5-high' });
     const code = extractCodeFromText(raw) || raw;
     return { raw, code };
