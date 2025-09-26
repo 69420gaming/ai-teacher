@@ -1,256 +1,682 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>AI Teacher with Puter.js</title>
+  <meta charset="utf-8"/>
+  <title>AI Teacher with Puter.js — p5.js Visual Agent</title>
   <script src="https://js.puter.com/v2/"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex/dist/contrib/auto-render.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <!-- ADDED: PDF.js for PDF text extraction -->
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.10.111/build/pdf.min.js"></script>
+  <script>
+    // Configure pdf.js worker
+    if (window['pdfjsLib']) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.10.111/build/pdf.worker.min.js';
+    }
+  </script>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body {
-      font-family: "Inter", sans-serif;
-      display: flex;
-      flex-direction: row;
-      gap: 1.5rem;
-      margin: 0;
-      padding: 1rem;
-      background: #f8fafc;
-      color: #1e293b;
-    }
-    #left, #right {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      background: white;
-      padding: 1rem;
-      border-radius: 0.75rem;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-    }
-    input, select, textarea, button {
-      font-family: inherit;
-      font-size: 14px;
-      padding: 0.5rem;
-      border-radius: 0.5rem;
-      border: 1px solid #cbd5e1;
-      outline: none;
-    }
-    input:focus, select:focus, textarea:focus {
-      border-color: #6366f1;
-      box-shadow: 0 0 0 2px rgba(99,102,241,0.3);
-    }
-    button {
-      background: #6366f1;
-      color: white;
-      cursor: pointer;
-      transition: background 0.2s;
-      border: none;
-    }
-    button:hover {
-      background: #4f46e5;
-    }
-    button:disabled {
-      background: #cbd5e1;
-      cursor: not-allowed;
-    }
-    #response {
-      flex: 1;
-      overflow-y: auto;
-      border: 1px solid #e2e8f0;
-      border-radius: 0.5rem;
-      padding: 0.75rem;
-      background: #f9fafb;
-    }
-    textarea {
-      width: 100%;
-      min-height: 200px;
-      resize: vertical;
-    }
-    iframe {
-      width: 100%;
-      flex: 1;
-      min-height: 300px;
-      border: 1px solid #e2e8f0;
-      border-radius: 0.5rem;
-      background: #f1f5f9;
-    }
-    .btn-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-    }
-    #userStatus {
-      font-size: 13px;
-      color: #475569;
-    }
+    :root{--bg:#f8fafc;--card:#fff;--muted:#475569;--accent:#6366f1;}
+    body{font-family:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,Arial;margin:0;padding:1rem;background:var(--bg);color:#0f172a;display:flex;gap:1.25rem;min-height:100vh;box-sizing:border-box;}
+    #left,#right{flex:1;display:flex;flex-direction:column;gap:0.75rem;background:var(--card);padding:1rem;border-radius:12px;box-shadow:0 4px 18px rgba(2,6,23,0.06);}
+    input,select,textarea,button{font-family:inherit;font-size:14px;padding:0.5rem;border-radius:8px;border:1px solid #e6eef8;outline:none;}
+    input:focus,textarea:focus,select:focus{box-shadow:0 0 0 4px rgba(99,102,241,0.08);border-color:var(--accent);}
+    button{background:var(--accent);color:#fff;border:none;cursor:pointer;transition:all .12s;}
+    button:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(99,102,241,0.2);}
+    button.secondary{background:#e2e8f0;color:#0f172a;}
+    button.ghost{background:transparent;color:var(--muted);border:1px dashed #e6eef8;}
+    button[disabled]{opacity:.6;cursor:not-allowed;transform:none;box-shadow:none;}
+    .btn-row{display:flex;gap:0.5rem;flex-wrap:wrap;}
+    #response{flex:1;overflow:auto;border:1px solid #eef2ff;border-radius:8px;padding:0.75rem;background:#fbfdff;min-height:120px;}
+    textarea{width:100%;min-height:160px;resize:vertical;}
+    #p5code{min-height:200px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,"Roboto Mono",monospace;white-space:pre;}
+    iframe#vizFrame{width:100%;flex:1;min-height:340px;border-radius:8px;border:1px solid #e6eef8;background:#fff;}
+    #userStatus{font-size:13px;color:var(--muted);align-self:center;}
+    .small{font-size:13px;color:var(--muted);}
+    .row{display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;}
+    .top-controls{display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;}
+    code.inline{background:#eef2ff;padding:0.08rem 0.25rem;border-radius:4px;font-family:ui-monospace;}
+    footer{font-size:12px;color:var(--muted);text-align:center;padding-top:6px;}
+    .muted{color:#666;}
   </style>
 </head>
 <body>
   <div id="left">
-    <input id="promptInput" placeholder="Ask me anything..."/>
-    <select id="modeSelect">
-      <option value="normal">Normal</option>
-      <option value="thinking">Thinking</option>
-    </select>
-    <div class="btn-row">
+    <div class="top-controls">
+      <input id="promptInput" placeholder="Ask me anything (topic, e.g. 'visualize harmonic motion')" style="flex-grow: 1;" />
+      <select id="modeSelect" title="Choose AI mode"><option value="normal">Normal</option><option value="thinking">Thinking (deeper)</option></select>
       <button id="teachBtn">Teach me</button>
       <button id="teachStreamBtn">Teach (stream)</button>
-      <button id="webBtn">Ask w/ web</button>
     </div>
-    <div id="response"></div>
-    <textarea id="aiConsole" placeholder="AI log..."></textarea>
+
+    <label class="small">Add URLs/PDF paths (1 per line) for the AI to analyze:</label>
+    <textarea id="sourceInput" placeholder="Paste URLs or PDF file URLs here. One per line."></textarea>
+
+    <!-- ADDED: proxy + limits -->
+    <div class="row">
+      <div class="row" style="flex:2">
+        <label class="small" for="proxySelect">CORS proxy</label>
+        <select id="proxySelect">
+          <option value="">No proxy (may fail on CORS)</option>
+          <option value="https://api.allorigins.win/raw?url=">AllOrigins (raw)</option>
+          <option value="https://thingproxy.freeboard.io/fetch/">ThingProxy</option>
+          <option value="https://r.jina.ai/http://">Jina Reader (http)</option>
+          <option value="https://r.jina.ai/https://">Jina Reader (https)</option>
+        </select>
+      </div>
+      <div style="flex:1">
+        <label class="small" for="perSourceLimit">Per-source char limit</label>
+        <input id="perSourceLimit" type="number" value="12000" min="2000" step="1000" />
+      </div>
+      <div style="flex:1">
+        <label class="small" for="totalLimit">Total char limit</label>
+        <input id="totalLimit" type="number" value="32000" min="8000" step="2000" />
+      </div>
+    </div>
+
+    <button id="scrapeAndAskBtn">Scrape Sources & Ask</button>
+
+    <div id="response" aria-live="polite"></div>
+    <textarea id="aiConsole" placeholder="AI log... (raw output / debug)"></textarea>
+
     <div class="btn-row">
-      <button id="copyBtn">Copy</button>
-      <button id="exportBtn">Export</button>
+      <button id="copyBtn" class="ghost">Copy text</button>
+      <button id="exportBtn" class="ghost">Export HTML</button>
+      <button id="generateVizBtn">Generate Viz (🔥GPT-5-High)</button>
     </div>
+
     <div class="btn-row">
-      <input id="saveName" placeholder="Lesson name"/>
-      <button id="saveBtn">Save</button>
-      <button id="loadBtn">Load</button>
+      <input id="saveName" placeholder="Lesson name" />
+      <button id="saveBtn" class="secondary">Save</button>
+      <button id="loadBtn" class="secondary">Load</button>
     </div>
+
     <div class="btn-row">
       <span id="userStatus">Not signed in</span>
-      <button id="signBtn">Sign In</button>
+      <button id="signBtn" class="secondary">Sign In</button>
     </div>
+
+    <div class="small">Tip: Use "Generate Viz (AI)" to have the model output a p5.js sketch. The agent tries to output runnable p5.js code in <code class="inline">```javascript</code> blocks or bare code.</div>
+    <footer>AI Teacher — p5.js visual agent — Salem mode activated ⚡</footer>
   </div>
+
   <div id="right">
-    <textarea id="p5code" placeholder="p5.js sketch here"></textarea>
+    <label class="small">p5.js Sketch (you can edit or paste AI output here)</label>
+    <textarea id="p5code" placeholder="// p5.js code will appear here"></textarea>
+
     <div class="btn-row">
       <button id="runVizBtn">Run visualization</button>
-      <button id="stopVizBtn">Stop</button>
-      <button id="annotateBtn">Annotate</button>
+      <button id="stopVizBtn" class="secondary">Stop</button>
+      <button id="annotateBtn" class="secondary">Annotate (AI)</button>
+      <button id="clearVizBtn" class="secondary">Clear</button>
     </div>
-    <iframe id="vizFrame"></iframe>
+
+    <iframe id="vizFrame" sandbox="allow-scripts"></iframe>
   </div>
 
 <script>
-const $ = id=>document.getElementById(id);
+  const $ = id => document.getElementById(id);
 
-function renderMarkdownWithKatex(md){
-  const html = marked.parse(md);
-  const container = document.createElement('div');
-  container.innerHTML = html;
-  renderMathInElement(container, { delimiters:[ {left:"$$", right:"$$", display:true}, {left:"$", right:"$", display:false} ] });
-  return container.innerHTML;
+  function renderMarkdownWithKatex(md){
+    try {
+      const html = (typeof marked.parse === 'function') ? marked.parse(md || '') : marked(md || '');
+      const container = document.createElement('div');
+      container.innerHTML = html;
+      if (typeof renderMathInElement === 'function') {
+        renderMathInElement(container, {
+          delimiters: [{ left: "$$", right: "$$", display: true }, { left: "$", right: "$", display: false }],
+          throwOnError: false
+        });
+      }
+      return container.innerHTML;
+    } catch (e){
+      console.error('Markdown render failed', e);
+      return (md || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+  }
+
+  // FIXED: robust code extractor
+  function extractCodeFromText(text){
+    if(!text) return '';
+    const m = text.match(/```(?:javascript|js)?\s*([\s\S]*?)```/i);
+    if(m && m[1]) return m[1].trim();
+    if(/function\s+setup\s*KATEX_INLINE_OPEN|function\s+draw\s*KATEX_INLINE_OPEN/i.test(text) || /createCanvas\s*KATEX_INLINE_OPEN/i.test(text)) return text.trim();
+    return '';
+  }
+
+  function runP5Sketch(code){
+    const safeUserCode = String(code).replace(/<\/script>/gi, '<\\/script>');
+    const safeHTML = `<!doctype html>
+<html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>html,body{margin:0;height:100%;background:white;}canvas{display:block;}</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"><\/script>
+</head><body><div id="root"></div><script>
+try {
+${safeUserCode}
+setTimeout(() => {
+  try {
+    if(typeof setup === 'function' || typeof draw === 'function') {
+      new p5();
+    } else {
+      document.body.innerHTML += '<div style="font-family:system-ui;padding:1rem;color:#475569">No setup() or draw() found. Call createCanvas(...) in setup().</div>';
+    }
+  } catch(e){
+    document.body.innerHTML = '<pre style="white-space:pre-wrap;color:#b91c1c">p5 start error:\\n' + (e && e.message ? e.message : String(e)) + '</pre>';
+  }
+}, 10);
+} catch (err) {
+  document.body.innerHTML = '<pre style="white-space:pre-wrap;color:#b91c1c">p5.js runtime error:\\n' + (err && err.message ? err.message : String(err)) + '</pre>';
 }
+<\/script><script>
+setTimeout(() => {
+  const hasCanvas = !!document.querySelector('canvas');
+  if(!hasCanvas && typeof setup === 'function'){
+    const hint = document.createElement('div');
+    hint.style.fontFamily = 'system-ui';
+    hint.style.padding = '12px';
+    hint.style.color = '#475569';
+    hint.innerText = 'No canvas detected. Make sure your sketch calls createCanvas(...) in setup().';
+    document.body.appendChild(hint);
+  }
+}, 500);
+<\/script></body></html>`;
+    $('vizFrame').srcdoc = safeHTML;
+  }
 
-async function askAI(prompt, {mode='normal', stream=false}={}){
-  const model = mode==='thinking' ? 'gpt-5-high' : 'gpt-5-chat-latest';
-  const response = await puter.ai.chat.completions.create({
-    model,
-    messages:[{role:'user', content:prompt}],
-    stream
+  function stopViz(){
+    $('vizFrame').srcdoc = '<!doctype html><html><body style="font-family:system-ui;padding:1rem;color:#475569">No sketch running</body></html>';
+  }
+
+  function logAI(text){
+    const el = $('aiConsole');
+    el.value = (el.value ? el.value + "\n\n" : "") + text;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  const extractText = (res) => {
+    if(!res) return '';
+    if(typeof res === 'string'){
+      const s = res.trim();
+      if((s.startsWith('{') || s.startsWith('['))){
+        try {
+          const parsed = JSON.parse(s);
+          return extractText(parsed);
+        } catch(e){
+          return res;
+        }
+      }
+      return res;
+    }
+    if(Array.isArray(res)) return res.map(r => extractText(r)).filter(Boolean).join('\n\n');
+    if(res?.message?.content) return res.message.content;
+    if(res?.choices && Array.isArray(res.choices)){
+      const joined = res.choices.map(c => {
+        if(c?.message?.content) return c.message.content;
+        if(c?.text) return c.text;
+        if(c?.content) return c.content;
+        return '';
+      }).filter(Boolean).join('\n\n');
+      if(joined) return joined;
+    }
+    if(res?.choices?.[0]?.message?.content) return res.choices[0].message.content;
+    if(res?.output) return res.output;
+    if(res?.content) return res.content;
+    if(res?.text) return res.text;
+    try { return JSON.stringify(res); } catch(e){ return String(res); }
+  };
+
+  // ---------- Puter.ai wrapper ----------
+  async function askAI(prompt, { mode='normal', stream=false, system=null, model=null } = {}){
+    if(!window.puter || !puter.ai){
+      throw new Error('Puter client not available (window.puter) — check SDK inclusion and environment.');
+    }
+    model = model || (mode==='thinking' ? 'gpt-5-high' : 'gpt-5-chat-latest');
+
+    const messages = [];
+    if(system) messages.push({ role:'system', content: system });
+    messages.push({ role:'user', content: prompt });
+
+    const attempts = [
+      async () => puter.ai.chat ? await puter.ai.chat({ model, messages, stream }) : Promise.reject('no puter.ai.chat'),
+      async () => puter.ai.chat ? await puter.ai.chat({ model, input: prompt, stream }) : Promise.reject('no puter.ai.chat'),
+      async () => puter.ai.chat ? await puter.ai.chat(prompt) : Promise.reject('no puter.ai.chat'),
+      async () => puter.ai.complete ? await puter.ai.complete({ model, messages }) : Promise.reject('no puter.ai.complete'),
+      async () => (typeof puter.ai === 'function') ? await puter.ai({ model, messages }) : Promise.reject('no puter.ai function'),
+      async () => (typeof puter.ai === 'function') ? await puter.ai(prompt) : Promise.reject('no puter.ai function'),
+      async () => (typeof puter.ai === 'function') ? await puter.ai({ prompt }) : Promise.reject('no puter.ai function')
+    ];
+
+    let lastErr = null;
+    for(const fn of attempts){
+      try {
+        const res = await fn();
+        if(stream && res && (typeof res[Symbol.asyncIterator] === 'function' || typeof res[Symbol.iterator] === 'function')){
+          let acc = '';
+          try {
+            for await (const chunk of res){
+              const delta = chunk?.choices?.[0]?.delta?.content ??
+                               chunk?.delta?.content ??
+                               chunk?.message?.content ??
+                               chunk?.content ??
+                               chunk?.text ??
+                               (typeof chunk === 'string' ? chunk : '');
+              if(delta){
+                acc += delta;
+                $('response').innerHTML = renderMarkdownWithKatex(acc);
+                logAI(delta);
+              }
+            }
+            return acc;
+          } catch(e){
+            console.warn('stream iteration partial:', e);
+            return acc || extractText(res);
+          }
+        }
+        return extractText(res);
+      } catch(err){
+        lastErr = err;
+        continue;
+      }
+    }
+    console.error('askAI failed on all attempted call shapes. last error:', lastErr);
+    throw new Error('askAI failed: ' + (lastErr?.message || String(lastErr)));
+  }
+
+  // --- VIZ code generator (unchanged except fixed extractor used elsewhere) ---
+  async function generateP5Code(topic, { mode='normal', stream=false } = {}){
+    const system = `You are "p5-generator", a code-only assistant. Output ONLY runnable p5.js JavaScript code (no explanation, no extra text). If you must include comments, use inline JavaScript comments. Ensure the sketch defines function setup() and (optionally) draw(). Avoid external libraries.`;
+    const prompt = `Generate a p5.js sketch that visualizes: ${topic}\n\nReturn only the JavaScript code (like what you'd paste into a <script> tag). Keep it under 200 lines when possible.`;
+    const raw = await askAI(prompt, { mode, stream, system, model: 'gpt-5-high' });
+    const code = extractCodeFromText(raw) || raw;
+    return { raw, code };
+  }
+
+  function setBusy(state, label){
+    const btns = [ $('teachBtn'), $('teachStreamBtn'), $('scrapeAndAskBtn'), $('generateVizBtn'), $('runVizBtn'), $('annotateBtn') ];
+    btns.forEach(b => { if(b) b.disabled = state; });
+    if(state && label) $('response').innerHTML = `<div class="small">... ${label}</div>`;
+  }
+
+  // --- Teach handlers ---
+  $('teachBtn').onclick = async ()=>{
+    const prompt = $('promptInput').value.trim();
+    if(!prompt){ alert('Write a question or topic first.'); return; }
+    setBusy(true, 'Thinking...');
+    try{
+      const content = await askAI(prompt, { mode: $('modeSelect').value, stream:false });
+      $('response').innerHTML = renderMarkdownWithKatex(content);
+      logAI(content);
+    } catch(e){
+      $('response').innerHTML = renderMarkdownWithKatex(`**🚨 Bummer! AI request failed for standard teaching.**\n\nError: ${e.message || e}`);
+      console.error(e);
+    } finally { setBusy(false); }
+  };
+
+  $('teachStreamBtn').onclick = async ()=>{
+    const prompt = $('promptInput').value.trim();
+    if(!prompt){ alert('Write a question or topic first.'); return; }
+    setBusy(true, 'Streaming...');
+    try{
+      const content = await askAI(prompt, { mode: $('modeSelect').value, stream:true });
+      $('response').innerHTML = renderMarkdownWithKatex(content);
+      logAI('[STREAM END]\n' + content);
+    } catch(e){
+      $('response').innerHTML = renderMarkdownWithKatex(`**🚨 Bummer! AI stream failed.**\n\nError: ${e.message || e}`);
+      console.error(e);
+    } finally { setBusy(false); }
+  };
+
+  // =========================
+  // ADDED: VANILLA JS SCRAPER
+  // =========================
+
+  // Build proxied URL if proxy selected
+  function buildTargetUrl(rawUrl, proxyPrefix){
+    if(!proxyPrefix) return rawUrl;
+    // For Jina Reader entries we expect the proxy already encodes the scheme (see select options)
+    if(proxyPrefix.includes('r.jina.ai')) {
+      // If user put https URL and selected http proxy, switch accordingly
+      if(rawUrl.startsWith('http://') && proxyPrefix.endsWith('http://')) return proxyPrefix + rawUrl.slice('http://'.length);
+      if(rawUrl.startsWith('https://') && proxyPrefix.endsWith('https://')) return proxyPrefix + rawUrl.slice('https://'.length);
+      // Fallback: just append rawUrl
+      return proxyPrefix + rawUrl;
+    }
+    return proxyPrefix + encodeURIComponent(rawUrl);
+  }
+
+  async function fetchResource(rawUrl, proxyPrefix){
+    const target = buildTargetUrl(rawUrl, proxyPrefix);
+    const res = await fetch(target, { method: 'GET' });
+    if(!res.ok) throw new Error(`Fetch failed (${res.status}) for ${rawUrl}`);
+    const contentType = (res.headers.get('content-type') || '').toLowerCase();
+    let text = null, ab = null;
+    if(contentType.includes('pdf') || rawUrl.toLowerCase().endsWith('.pdf')){
+      ab = await res.arrayBuffer();
+    } else {
+      // Some proxies set text/plain even for HTML; treat as text then parse
+      text = await res.text();
+    }
+    return { contentType, text, arrayBuffer: ab, url: rawUrl };
+  }
+
+  function pickTitleFromDoc(doc){
+    const og = doc.querySelector('meta[property="og:title"]')?.getAttribute('content');
+    const tw = doc.querySelector('meta[name="twitter:title"]')?.getAttribute('content');
+    const t = doc.querySelector('title')?.textContent;
+    return og || tw || t || '';
+    }
+
+  function extractMainTextFromHtml(html){
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    // Drop non-content
+    doc.querySelectorAll('script,style,noscript,svg,iframe,footer,header,nav,aside').forEach(n=>n.remove());
+    const CANDIDATES = [
+      'article', 'main', '#main', '#content', '#page',
+      '.article', '.article-body', '.article-content', '.post-content', '.entry-content',
+      '.content', '.post', '.blog-post', '.markdown-body', '.ProseMirror'
+    ];
+    let bestNode = null, bestLen = 0;
+    for(const sel of CANDIDATES){
+      doc.querySelectorAll(sel).forEach(n=>{
+        const len = (n.innerText || '').trim().length;
+        if(len > bestLen){ bestLen = len; bestNode = n; }
+      });
+      if(bestNode && bestLen > 400) break;
+    }
+    let text = '';
+    if(bestNode){
+      text = bestNode.innerText || '';
+    } else {
+      text = (doc.body ? doc.body.innerText : doc.documentElement.textContent) || '';
+    }
+    text = text.replace(/\n{3,}/g, '\n\n').replace(/\s{3,}/g, ' ').trim();
+    const title = pickTitleFromDoc(doc);
+    return { title, text, htmlLength: html.length, extractedLength: text.length };
+  }
+
+  async function extractTextFromPdfArrayBuffer(ab){
+    if(!window['pdfjsLib']) throw new Error('PDF.js not loaded');
+    const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+    const numPages = pdf.numPages;
+    let out = [];
+    for(let i=1;i<=numPages;i++){
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items.map(item => item.str).join(' ');
+      out.push(pageText);
+      // Basic rate control for huge PDFs
+      if(out.join(' ').length > 200000) { out.push('\n...[truncated]'); break; }
+    }
+    return out.join('\n\n').replace(/\s{3,}/g, ' ').trim();
+  }
+
+  function truncate(s, max){ if(!s) return ''; if(s.length <= max) return s; return s.slice(0, max) + '\n...[truncated]'; }
+
+  async function scrapeOneSource(url, { proxyPrefix, perSourceLimit }){
+    try{
+      const res = await fetchResource(url, proxyPrefix);
+      if(res.arrayBuffer){
+        const text = await extractTextFromPdfArrayBuffer(res.arrayBuffer);
+        const ext = { title: (url.split('/').pop() || 'PDF').replace(/[#?].*$/,''), text };
+        return { ok:true, type:'pdf', url, title: ext.title, text: truncate(ext.text, perSourceLimit) };
+      } else {
+        // HTML or text
+        const ct = res.contentType || '';
+        if(ct.includes('html') || res.text?.includes('<html')){
+          const ext = extractMainTextFromHtml(res.text || '');
+          const title = ext.title || (url.split('/').pop() || '').replace(/[-_]/g,' ').trim() || 'Untitled';
+          return { ok:true, type:'html', url, title, text: truncate(ext.text, perSourceLimit) };
+        } else if (ct.includes('json')) {
+          return { ok:true, type:'json', url, title:'JSON: ' + url, text: truncate(res.text, perSourceLimit) };
+        } else {
+          // plain text or unknown
+          return { ok:true, type:'text', url, title: 'Text: ' + url, text: truncate(res.text || '', perSourceLimit) };
+        }
+      }
+    } catch(err){
+      return { ok:false, url, error: err.message || String(err) };
+    }
+  }
+
+  // Simple concurrency limiter
+  async function mapLimit(items, limit, worker){
+    const ret = [];
+    let i = 0;
+    const running = new Set();
+    async function runOne(idx){
+      const item = items[idx];
+      const p = Promise.resolve().then(()=>worker(item, idx)).then(v=>{ ret[idx] = v; running.delete(p); });
+      running.add(p);
+      await p;
+    }
+    while(i < items.length){
+      while(running.size < limit && i < items.length){
+        runOne(i++);
+      }
+      // wait for any to finish
+      if(running.size) await Promise.race([...running]);
+    }
+    // ensure all done
+    await Promise.all([...running]);
+    return ret;
+  }
+
+  async function scrapeSourcesFromInput(){
+    const raw = $('sourceInput').value.trim();
+    if(!raw) return [];
+    const proxyPrefix = $('proxySelect').value;
+    const perSourceLimit = Math.max(2000, parseInt($('perSourceLimit').value || '12000', 10));
+    const lines = raw.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    const urls = Array.from(new Set(lines));
+    $('response').innerHTML = renderMarkdownWithKatex(`Scraping ${urls.length} source(s)... This may take a moment.`);
+    logAI(`[SCRAPER] Starting: ${urls.length} sources\nProxy: ${proxyPrefix || '(none)'}`);
+    const results = await mapLimit(urls, 3, (u, idx)=>scrapeOneSource(u, { proxyPrefix, perSourceLimit }));
+    const ok = results.filter(r => r.ok);
+    const fail = results.filter(r => !r.ok);
+    if(fail.length){
+      logAI(`[SCRAPER] Failed ${fail.length} source(s):\n${fail.map(f=>'- '+f.url+' — '+f.error).join('\n')}`);
+    }
+    logAI(`[SCRAPER] Success ${ok.length}/${results.length}`);
+    return results;
+  }
+
+  function buildPromptWithScrapedData({ userPrompt, scraped, totalLimitChars }){
+    // Keep within total limit
+    const ok = scraped.filter(s => s.ok);
+    let acc = '';
+    const chunks = [];
+    for(const s of ok){
+      const block = [
+        `Source: ${s.title} (${s.url})`,
+        '',
+        s.text
+      ].join('\n');
+      if((acc.length + block.length) > totalLimitChars){
+        if(acc.length < totalLimitChars && block.length > 1000){
+          const remain = Math.max(0, totalLimitChars - acc.length - 20);
+          chunks.push(block.slice(0, remain) + '\n...[truncated]');
+          acc += block.slice(0, remain);
+        }
+        break;
+      } else {
+        chunks.push(block);
+        acc += block;
+      }
+    }
+
+    const failed = scraped.filter(s => !s.ok).map(s => `- ${s.url} — ${s.error}`).join('\n');
+    const failureNote = failed ? `\n\nFailed sources (ignored):\n${failed}\n` : '';
+
+    return `You are provided with scraped content from the following web/PDF sources. Use ONLY this material to answer the user's request. If information is missing, say so. Cite sources inline by URL where relevant.
+
+${failureNote}
+=== SCRAPED SOURCES START ===
+${chunks.join('\n\n---\n\n')}
+=== SCRAPED SOURCES END ===
+
+USER REQUEST:
+${userPrompt}
+`;
+  }
+
+  // --- NEW: Scrape Sources & Ask Handler ---
+  $('scrapeAndAskBtn').onclick = async ()=>{
+    const prompt = $('promptInput').value.trim();
+    const sources = $('sourceInput').value.trim();
+
+    if (!prompt) {
+      $('response').innerHTML = renderMarkdownWithKatex('**Hold up!** You need to put a question in the main input first.');
+      return;
+    }
+
+    setBusy(true, 'Scraping and analyzing sources (this might take a minute)...');
+
+    try {
+      const scraped = sources ? await scrapeSourcesFromInput() : [];
+      const totalLimit = Math.max(8000, parseInt($('totalLimit').value || '32000', 10));
+
+      let finalPrompt;
+      let modelToUse = 'gpt-5-high';
+
+      if (scraped.length) {
+        finalPrompt = buildPromptWithScrapedData({ userPrompt: prompt, scraped, totalLimitChars: totalLimit });
+      } else {
+        // Fallback: no sources provided; do a normal ask with "thinking" model
+        finalPrompt = `No external sources were provided or scraping failed. Provide the best possible answer to:\n\n${prompt}\n\nIf recency matters, say what you’re unsure about.`;
+      }
+
+      const content = await askAI(finalPrompt, { model: modelToUse, stream:false });
+      $('response').innerHTML = renderMarkdownWithKatex(content);
+
+      // Show quick summary of scraped sources under the answer
+      const ok = scraped.filter(s=>s.ok);
+      if(ok.length){
+        const summary = ok.map(s => `- ${s.title || '(untitled)'} — ${s.url}`).join('\n');
+        $('response').innerHTML += renderMarkdownWithKatex(`\n\n---\n\n_Sources used:_\n${summary}`);
+      }
+
+      logAI('[SOURCE SCRAPE & ASK]\n' + content);
+    } catch(e){
+      $('response').innerHTML = renderMarkdownWithKatex(`**🚨 Server Error: Source Scraping Failed.**\n\nThe AI request failed. Error: ${e.message || e}`);
+      console.error(e);
+    } finally { setBusy(false); }
+  };
+  // --- END NEW Handler ---
+
+  // --- VIZ Generation Handler ---
+  $('generateVizBtn').onclick = async ()=>{
+    const topic = $('promptInput').value.trim();
+    if(!topic){ $('response').innerHTML = renderMarkdownWithKatex('**Gotta have a topic!** Type what you want to visualize.'); return; }
+    setBusy(true, 'Generating viz code with the high-key model...');
+    try{
+      const { raw, code } = await generateP5Code(topic, { mode: $('modeSelect').value, stream:false });
+      logAI('[VIZ GENERATION]\n' + raw);
+      if(!code || code.trim().length === 0){
+        $('response').innerHTML = renderMarkdownWithKatex("**AI output did not contain a clear code block.**\n\n" + "Raw output:\n\n```\n" + raw.slice(0,2000) + "\n```\n\nTry adjusting the prompt.");
+      } else {
+        $('p5code').value = code;
+        runP5Sketch(code);
+        $('response').innerHTML = renderMarkdownWithKatex('**👑 Viz Check!** Generated that p5.js sketch for **' + topic + '**. Preview running on the right.');
+      }
+    } catch(e){
+      $('response').innerHTML = renderMarkdownWithKatex(`**🚨 Failed to generate visualization!**\n\nError: ${e.message || e}`);
+      console.error(e);
+    } finally { setBusy(false); }
+  };
+
+  // --- Remaining Handlers ---
+  $('runVizBtn').onclick = ()=>{
+    const code = $('p5code').value.trim();
+    if(!code){ $('response').innerHTML = renderMarkdownWithKatex('**Wait!** Put or generate a p5.js sketch first.'); return; }
+    try{
+      runP5Sketch(code);
+      $('response').innerHTML = renderMarkdownWithKatex('Sketch is running... 🎨');
+    } catch(e){
+      $('response').innerHTML = renderMarkdownWithKatex(`**Sketch Run Failed!**\n\nError: ${e.message || e}`);
+      console.error(e);
+    }
+  };
+  $('stopVizBtn').onclick = stopViz;
+  $('clearVizBtn').onclick = ()=>{ $('p5code').value = ''; stopViz(); };
+
+  $('annotateBtn').onclick = async ()=>{
+    const code = $('p5code').value.trim();
+    if(!code){ $('response').innerHTML = renderMarkdownWithKatex('**No code, no comments!** Put a sketch in the editor to annotate.'); return; }
+    setBusy(true, 'Annotating code...');
+    try{
+      const prompt = `Annotate and explain this p5.js sketch. Provide a commented version of the code. If possible, suggest 2 interactive controls and include them in the commented code. Return only the commented JavaScript code block. If you must include text, keep it inside comments.\n\nCode:\n${code}`;
+      const system = `You are "annotator", an assistant that returns ONLY JavaScript code with comments, suitable for p5.js. No extra prose outside code.`;
+      const raw = await askAI(prompt, { mode: $('modeSelect').value, stream:false, system });
+      logAI('[ANNOTATE]\n' + raw);
+      const extracted = extractCodeFromText(raw) || raw;
+      if(extracted){
+        $('p5code').value = extracted;
+        $('response').innerHTML = renderMarkdownWithKatex('Annotated code inserted into the editor. 📖');
+      } else {
+        $('response').innerHTML = renderMarkdownWithKatex('Could not extract annotated code. See AI log. Try "Thinking" mode.');
+      }
+    } catch(e){
+      $('response').innerHTML = renderMarkdownWithKatex(`**Annotate Fail!**\n\nError: ${e.message || e}`);
+      console.error(e);
+    } finally { setBusy(false); }
+  };
+
+  $('copyBtn').onclick = async ()=>{
+    try{
+      const textContent = $('response').innerText || '';
+      await navigator.clipboard.writeText(textContent);
+      $('response').innerHTML = renderMarkdownWithKatex('**Text copied!** 🚀');
+    } catch(e){
+      const textArea = document.createElement('textarea');
+      textArea.value = $('response').innerText || '';
+      document.body.appendChild(textArea);
+      textArea.select();
+      try { document.execCommand('copy'); $('response').innerHTML = renderMarkdownWithKatex('**Text copied (fallback)!**'); } catch(err){ $('response').innerHTML = renderMarkdownWithKatex('**Copy failed!**'); }
+      document.body.removeChild(textArea);
+    }
+  };
+
+  $('exportBtn').onclick = ()=>{
+    const styles = `<style>body{font-family:system-ui;padding:2rem;max-width:800px;margin:0 auto;line-height:1.6;}code{background:#f3f4f6;padding:0.2rem 0.4rem;border-radius:0.25rem;}</style>`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${styles}</head><body>` + $('response').innerHTML + `</body></html>`;
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'lesson.html'; a.click(); URL.revokeObjectURL(url);
+  };
+
+  (async function init(){
+    try{
+      if(window.puter && puter.auth){
+        try{
+          const signed = await puter.auth.isSignedIn();
+          if(signed){
+            const u = await puter.auth.getUser();
+            $('userStatus').textContent = u?.username || u?.email || u?.id || 'Signed in';
+            $('signBtn').textContent = 'Sign Out';
+          }
+        } catch(e){ console.log('Auth check failed:', e); }
+      } else {
+        console.warn('Puter client not detected on window.');
+        $('userStatus').textContent = 'Puter not available';
+      }
+    } catch(e){ console.warn('Init error:', e); }
+
+    stopViz();
+  })();
+
+  window.addEventListener('keydown', (e)=>{
+    if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){
+      e.preventDefault();
+      if(document.activeElement === $('p5code')) $('runVizBtn').click();
+      else if(document.activeElement === $('promptInput')) $('teachBtn').click();
+      else if(document.activeElement === $('sourceInput')) $('scrapeAndAskBtn').click();
+    }
+    if(e.key === 'Escape') $('stopVizBtn').click();
   });
-  if(!stream){
-    return response.choices[0].message.content;
-  } else {
-    let result="";
-    for await (const delta of response){
-      if(delta.choices?.[0]?.delta?.content){
-        result += delta.choices[0].delta.content;
-        $('response').innerHTML = renderMarkdownWithKatex(result);
-      }
-    }
-    return result;
-  }
-}
-
-async function ensureSignedIn(){
-  if(!(await puter.auth.isSignedIn())){
-    await puter.auth.signIn();
-    const u = await puter.auth.getUser();
-    $('userStatus').textContent = u.username || u.email || u.id;
-    $('signBtn').textContent = 'Sign Out';
-  }
-}
-
-function runP5Sketch(code){
-  const template = `<!DOCTYPE html><html><head><script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"><\/script></head><body><script>${code}<\/script></body></html>`;
-  $('vizFrame').srcdoc = template;
-}
-
-$('runVizBtn').onclick = ()=>{
-  const code = $('p5code').value;
-  runP5Sketch(code);
-};
-$('stopVizBtn').onclick = ()=>{
-  $('vizFrame').srcdoc = 'No sketch running';
-};
-$('annotateBtn').onclick = async ()=>{
-  const code = $('p5code').value;
-  await ensureSignedIn();
-  const prompt = `Annotate and explain this p5.js sketch. Make suggestions to improve performance and add 2 interactive controls. Provide a commented version of the code.`;
-  const annotated = await askAI(prompt + "\n\n" + code, {mode: $('modeSelect').value, stream:true});
-  if(annotated){
-    const m = annotated.match(/```(?:javascript\\n)?([\\s\\S]*?)```/);
-    if(m) $('p5code').value = m[1];
-  }
-};
-
-$('saveBtn').onclick = async ()=>{
-  const name = $('saveName').value.trim() || prompt('Enter a name for this lesson');
-  if(!name) return;
-  await ensureSignedIn();
-  const payload = { prompt: $('promptInput').value, md: $('response').innerText, code: $('p5code').value, aiLog: $('aiConsole').value };
-  try{
-    await puter.kv.set('lesson:'+name, JSON.stringify(payload));
-    alert('Saved as '+name);
-  } catch(e){
-    alert('Save failed: '+e.message);
-  }
-};
-
-$('loadBtn').onclick = async ()=>{
-  const name = $('saveName').value.trim() || prompt('Name to load:');
-  if(!name) return;
-  await ensureSignedIn();
-  try{
-    const raw = await puter.kv.get('lesson:'+name);
-    if(!raw) return alert('No lesson found');
-    const obj = JSON.parse(raw);
-    $('promptInput').value = obj.prompt || '';
-    $('response').innerHTML = obj.md || '';
-    $('p5code').value = obj.code || '';
-    $('aiConsole').value = obj.aiLog || '';
-    alert('Loaded '+name);
-  } catch(e){
-    alert('Load failed: '+e.message);
-  }
-};
-
-$('copyBtn').onclick = ()=>{
-  navigator.clipboard.writeText($('response').innerText).then(()=>alert('Copied rendered markdown text'));
-};
-
-$('exportBtn').onclick = ()=>{
-  const html = `${$('response').innerHTML}`;
-  const blob = new Blob([html], {type:'text/html'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href=url;
-  a.download = 'lesson.html';
-  a.click();
-};
-
-(async function(){
-  try{
-    if(window.puter && puter.auth){
-      const signed = await puter.auth.isSignedIn();
-      if(signed){
-        const u = await puter.auth.getUser();
-        $('userStatus').textContent = u.username || u.email || u.id;
-        $('signBtn').textContent = 'Sign Out';
-      }
-    }
-  } catch(e){
-    console.warn('init puter failed', e);
-  }
-  $('response').innerHTML = renderMarkdownWithKatex('# Welcome to AI Teacher\\nType a topic and press **Teach me**. Use `Thinking` mode for deeper answers (slower) and `Normal` for quick answers. Use the right panel to run p5 visualizations.');
-})();
-
 </script>
 </body>
 </html>
